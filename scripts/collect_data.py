@@ -45,6 +45,8 @@ def validate_round(data, today=None):
     today = get_today_round() if today is None else today
     if not isinstance(data, dict) or data.get("schema_version") != 1:
         raise ValueError("지원하지 않는 회차 데이터입니다.")
+    if "similarity_scale" in data and data["similarity_scale"] != 100:
+        raise ValueError("지원하지 않는 유사도 단위입니다.")
     number = data.get("round")
     if type(number) is not int or not 0 <= number <= today:
         raise ValueError("유효하지 않거나 미래의 회차입니다.")
@@ -113,7 +115,7 @@ def load_archive(root, today=None):
 
 def export_round(manager, number, now):
     data = {
-        "schema_version": 1, "round": number, "date": get_round_date(number).isoformat(),
+        "schema_version": 1, "similarity_scale": 100, "round": number, "date": get_round_date(number).isoformat(),
         "timezone": "Asia/Seoul", "collected_at": now.isoformat(),
         "source": f"https://semantle-ko.newsjel.ly/top_scores/{number}",
         "analyzer": {"name": "Okt", "konlpy_version": "0.6.0", "rules_version": 1},

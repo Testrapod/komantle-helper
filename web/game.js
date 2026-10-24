@@ -37,12 +37,20 @@ export class Game {
       const data = JSON.parse(text);
       if (data.schema_version !== 1 || data.round !== this.round || typeof data.given_up !== 'boolean' || !Array.isArray(data.guesses) || data.guesses.length > 1000) throw new Error();
       const seen = new Set(), guesses = [];
+      let corrected = false;
       for (const row of data.guesses) {
         const word = normalizeGuess(row.word);
         if (seen.has(word) || guesses.some(guess => guess.correct)) throw new Error();
-        guesses.push(validateGuess(row, word, this.answer)); seen.add(word);
+        let guess = validateGuess(row, word, this.answer);
+        const cached = this.words.get(word);
+        if (cached) {
+          corrected ||= guess.similarity !== cached.similarity || guess.rank !== cached.rank;
+          guess = validateGuess({ word, similarity: cached.similarity, rank: cached.rank, correct: cached.rank === 0 }, word, this.answer);
+        }
+        guesses.push(guess); seen.add(word);
       }
       this.guesses = guesses; this.givenUp = data.given_up;
+      if (corrected) this.save();
     } catch { this.warning = '이전 기록을 읽지 못해 새 게임으로 시작했어요.'; }
   }
 

@@ -26,6 +26,23 @@ test('cached guesses, duplicates and per-round records survive reload', async ({
   await expect(page.locator('#game-count')).toHaveText('1번 추측');
 });
 
+test('previous cached scores are repaired on reload without losing history', async ({ page }) => {
+  await ready(page);
+  await guess(page, '과일');
+  const original = await page.locator('#guess-rows tr td').nth(2).innerText();
+  await page.evaluate(() => {
+    const key = `komantle-helper:game:v1:${document.getElementById('round').value}`;
+    const saved = JSON.parse(localStorage.getItem(key));
+    saved.guesses[0].similarity /= 100;
+    localStorage.setItem(key, JSON.stringify(saved));
+  });
+  await page.reload();
+  await expect(page.locator('#game-count')).toHaveText('1번 추측');
+  await expect(page.locator('#guess-rows tr td').nth(2)).toHaveText(original);
+  await page.reload();
+  await expect(page.locator('#guess-rows tr td').nth(2)).toHaveText(original);
+});
+
 test('correct answer ends the game and restores completed state', async ({ page }) => {
   await ready(page); await guess(page, '사과');
   await expect(page.locator('#game-message')).toContainText('정답이에요');

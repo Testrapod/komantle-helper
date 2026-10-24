@@ -97,7 +97,7 @@ class GameSession:
             data = json.loads(self.path.read_text())
             if data['schema_version'] != 1 or data['round'] != self.number or type(data['given_up']) is not bool or not isinstance(data['guesses'], list) or len(data['guesses']) > 1000:
                 raise ValueError()
-            guesses, seen = [], set()
+            guesses, seen, corrected = [], set(), False
             for row in data['guesses']:
                 word = normalize_word(row['word'])
                 rank, score, correct = row['rank'], row['similarity'], row['correct']
@@ -105,9 +105,15 @@ class GameSession:
                     raise ValueError()
                 if any(g.correct for g in guesses):
                     raise ValueError()
+                cached = self.words.get(word)
+                if cached:
+                    corrected |= score != cached['similarity'] or rank != cached['word_id']
+                    rank, score = cached['word_id'], cached['similarity']
                 seen.add(word)
                 guesses.append(Guess(word, score, rank, correct))
             self.guesses, self.given_up = guesses, data['given_up']
+            if corrected:
+                self._save()
         except (OSError, ValueError, KeyError, TypeError):
             self.storage_warning = '기존 게임 기록을 읽지 못해 새 게임으로 시작합니다.'
 

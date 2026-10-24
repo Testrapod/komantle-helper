@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Game, normalizeGuess } from '../../web/game.js';
+import { Game, GAME_PREFIX, normalizeGuess } from '../../web/game.js';
 import { handleGuess, parseScore } from '../../backend/handler.js';
 
 const data = { round: 1667, words: [
@@ -31,6 +31,20 @@ test('uncached scoring and errors preserve attempt count', async () => {
   game.fetcher = async () => Response.json({ error: '모르는 단어' }, { status: 404 });
   await assert.rejects(game.submit('없는단어'), /모르는 단어/);
   assert.equal(game.guesses.length, 1);
+});
+
+test('restoring fixes cached scores without rescaling valid low live scores or losing attempts', () => {
+  const saved = storage();
+  saved.setItem(`${GAME_PREFIX}1667`, JSON.stringify({ schema_version: 1, round: 1667, given_up: true, guesses: [
+    { word: '과일', similarity: .5125, rank: 1, correct: false },
+    { word: '바다', similarity: .25, rank: null, correct: false },
+  ] }));
+  const game = new Game(data, { storage: saved });
+  assert.deepEqual(game.guesses.map(guess => guess.similarity), [51.25, .25]);
+  assert.equal(game.givenUp, true);
+  assert.equal(game.guesses.length, 2);
+  assert.equal(JSON.parse(saved.getItem(game.key)).guesses[0].similarity, 51.25);
+  assert.deepEqual(new Game(data, { storage: saved }).guesses, game.guesses);
 });
 
 test('giveup, broken storage and quota failure remain usable', async () => {
