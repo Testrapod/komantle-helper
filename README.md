@@ -17,7 +17,10 @@
 
 보관된 단어는 JSON의 점수를 사용하고, 그 밖의 단어는 별도 채점 API를 통해 원본 점수를 조회합니다.
 원본의 조회 기간이 지난 회차에서 보관되지 않은 단어는 채점할 수 없으며, 실패한 추측은 횟수에 포함하지 않습니다.
-채점 API의 소스·배포 방법은 [backend 안내](backend/README.md)에 정리했습니다.
+채점 API는 공용 [API 서비스](https://api.eastsea-y.chatgpt.site)의 `POST /api/komantle-helper/v1/guess`를 사용합니다.
+서버 소스와 서버 단위 테스트는 `chatgpt-sites` 저장소의 `sites/api/`에서 관리하고,
+이 저장소에서는 웹 클라이언트와 API 응답 처리·브라우저 테스트를 관리합니다.
+API는 `{round, word}`를 받아 `{word, similarity, rank, correct}`를 반환하며, 오류는 `{error}` 문자열과 HTTP 상태로 전달합니다.
 
 원본 `top_scores`와 `guess` API의 유사도는 -1~1이며, 수집·채점 경계에서 ×100하여
 화면·보관 JSON·게임 기록을 모두 -100~100 단위로 통일합니다.

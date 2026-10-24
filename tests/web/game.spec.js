@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { GUESS_API_URL } from '../../web/config.js';
 
 async function ready(page) {
   await page.goto('./');
@@ -65,7 +66,7 @@ test('giveup requires confirmation and is kept on reload', async ({ page }) => {
 });
 
 test('uncached words are scored through the API and failed words do not count', async ({ page }) => {
-  await page.route('**/api/guess', async route => {
+  await page.route(GUESS_API_URL, async route => {
     const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     const { word } = route.request().postDataJSON();
@@ -82,7 +83,7 @@ test('uncached words are scored through the API and failed words do not count', 
 
 test('changing rounds while a guess is pending discards its response', async ({ page }) => {
   let resolveRequest;
-  await page.route('**/api/guess', async route => {
+  await page.route(GUESS_API_URL, async route => {
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type' } });
     await new Promise(resolve => { resolveRequest = resolve; });
     await route.fulfill({ headers: { 'Access-Control-Allow-Origin': '*' }, json: { word: '바다', similarity: 12, rank: null, correct: false } }).catch(() => {});
