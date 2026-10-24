@@ -1,5 +1,6 @@
 import { loadManifest, loadRound } from './data.js';
 import { LABELS, parseRank, todayRound, hintValue } from './hints.js';
+import { createGameUI } from './game-ui.js';
 
 const $ = id => document.getElementById(id);
 const buttons = [...document.querySelectorAll('[data-hint]')];
@@ -8,6 +9,7 @@ let manifest, roundData, words, selectedWord, controller;
 let requestId = 0;
 let seenToday = todayRound();
 const revealed = new Set();
+const gameUI = createGameUI();
 
 function closeHint(kind) {
   revealed.delete(kind);
@@ -66,6 +68,7 @@ function updateNotice() {
 async function chooseRound(number, retry = true) {
   const id = ++requestId;
   controller?.abort(); controller = new AbortController();
+  gameUI.clear();
   reset(); setReady(false); setError(''); words = null; selectedWord = null; roundData = null;
   $('target').textContent = '데이터를 불러오는 중';
   $('data-date').textContent = '회차 데이터 확인 중'; $('collected-at').textContent = '잠시만 기다려주세요.';
@@ -75,6 +78,7 @@ async function chooseRound(number, retry = true) {
     const data = await loadRound(manifestURL, record, controller.signal);
     if (id !== requestId) return;
     roundData = data; words = new Map(data.words.map(word => [word.rank, word]));
+    gameUI.mount(data);
     $('character').value = '1';
     $('data-date').textContent = `${data.date} · ${data.round}회 데이터`;
     $('collected-at').textContent = `수집 ${new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(data.collected_at))} (한국 시간)`;
@@ -96,6 +100,7 @@ async function chooseRound(number, retry = true) {
 async function start(preferred = $('round').disabled ? NaN : Number($('round').value)) {
   const id = ++requestId;
   controller?.abort(); controller = new AbortController();
+  gameUI.clear();
   reset(); setReady(false); setError(''); words = null; selectedWord = null; roundData = null; $('round').disabled = true;
   try {
     manifest = await loadManifest(manifestURL, controller.signal);
