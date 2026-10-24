@@ -1,4 +1,5 @@
 from datetime import datetime
+from functools import cached_property, lru_cache
 import requests
 from zoneinfo import ZoneInfo
 
@@ -9,6 +10,7 @@ SEOUL_TIME_ZONE = ZoneInfo("Asia/Seoul")
 
 KOMANTLE_URL = "https://semantle-ko.newsjel.ly/top_scores"
 KOMANTLE_START_DATE = datetime(2022, 4, 1, tzinfo=SEOUL_TIME_ZONE)
+REQUEST_TIMEOUT = 15
 
 START_UNICODE = 0xAC00  # "가"
 END_UNICODE = 0xD7A3    # "힣"
@@ -17,6 +19,20 @@ INITIAL_CONSONANTS = [
     "ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ",
     "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"
 ]
+
+
+class KomantleError(ValueError):
+    """사용자에게 표시할 수 있는 조회/분석 오류."""
+
+
+@lru_cache(maxsize=1)
+def get_tokenizer():
+    try:
+        return Okt()
+    except (RuntimeError, OSError, ValueError) as error:
+        raise KomantleError(
+            "품사 분석기를 시작하지 못했습니다. Java 설치와 JAVA_HOME을 확인해주세요."
+        ) from error
 
 
 class Word:
@@ -28,9 +44,14 @@ class Word:
 
     def __init__(self, word: str):
         self.word = word
-        self.pos = self._get_pos()
         self.initial_consonant = self._get_initial_consonant()
         self.length = self._get_length()
+
+
+    @cached_property
+    def pos(self) -> str:
+        # 품사가 필요한 단어만 분석하고 결과를 재사용한다.
+        return self._get_pos()
 
 
     def __repr__(self):
@@ -38,10 +59,8 @@ class Word:
 
 
     def _get_pos(self) -> str:
-        # TODO: 토크나이징 이슈
-        # - 하나의 단어를 여러 개의 형태소로 분리해 정확한 품사 파악이 어려움 -> 로직 개선 필요
-        # - Okt 토크나이저를 제외한 다른 토크나이저들은 토크나이징 하는데 많은 시간 소요됨 -> lazy evalution, memorizing 적용 필요
-        tokenizer = Okt()
+        # 여러 형태소로 분리되는 단어는 기존 규칙대로 '기타'로 분류한다.
+        tokenizer = get_tokenizer()
         pos_tags = tokenizer.pos(self.word)
         # print(pos_tags)
         
@@ -87,27 +106,52 @@ class WordManager:
         }
     ]
     """
-    word_list: list = []
-
-
     def __init__(self, komantle_no: int):
+        if isinstance(komantle_no, bool) or not isinstance(komantle_no, int) or komantle_no < 0:
+            raise KomantleError("꼬맨틀 회차는 0 이상의 정수여야 합니다.")
         url = f"{KOMANTLE_URL}/{komantle_no}"
 
-        response = requests.get(url)
-        if response.status_code != 200:
-            print(f"죄송합니다. {komantle_no}번째 꼬맨틀 정보를 찾을 수 없어 프로그램을 종료합니다.")
-            exit(0)
-        data = response.json()
+        try:
+            response = requests.get(url, timeout=REQUEST_TIMEOUT)
+            if response.status_code == 404:
+                raise KomantleError(f"{komantle_no}번째 꼬맨틀 정보를 찾을 수 없습니다.")
+            if response.status_code == 422:
+                message = f"{komantle_no}번째 꼬맨틀 정보를 조회할 수 없습니다."
+                try:
+                    payload = response.json()
+                    detail = payload.get("detail") if isinstance(payload, dict) else None
+                    if isinstance(detail, dict) and isinstance(detail.get("description"), str):
+                        message += f" {detail['description']}"
+                except ValueError:
+                    pass
+                raise KomantleError(message)
+            response.raise_for_status()
+        except requests.RequestException as error:
+            raise KomantleError("꼬맨틀 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.") from error
 
-        answer = data["key"]
-        self.word_list.append({"word_id": 0, "word": Word(answer), "similarity": 100})
+        try:
+            data = response.json()
+            answer = data["key"]
+            scores = data["top_scores"]
+            if not isinstance(answer, str) or not answer or not isinstance(scores, list):
+                raise ValueError("Invalid answer or scores")
 
-        for top_score in data["top_scores"]:
-            word_id = int(top_score[0])
-            word = Word(top_score[1])
-            similarity = float(top_score[2])
+            self.word_list = [{"word_id": 0, "word": Word(answer), "similarity": 100.0}]
+            seen_ranks = {0}
+            for rank, text, score in scores:
+                if type(rank) is not int or not 1 <= rank <= 1000 or rank in seen_ranks:
+                    raise ValueError("Invalid or duplicate rank")
+                if not isinstance(text, str) or not text:
+                    raise ValueError("Invalid word")
+                similarity = float(score)
+                if not -100 <= similarity <= 100:
+                    raise ValueError("Invalid similarity")
+                seen_ranks.add(rank)
+                self.word_list.append({"word_id": rank, "word": Word(text), "similarity": similarity})
+        except (ValueError, KeyError, TypeError) as error:
+            raise KomantleError("꼬맨틀 서버의 응답 형식이 올바르지 않습니다.") from error
 
-            self.word_list.append({"word_id": word_id, "word": word, "similarity": similarity})
+        self._words_by_rank = {entry["word_id"]: entry for entry in self.word_list}
 
 
     def get_word(self, word_id: int) -> str:
@@ -131,27 +175,28 @@ class WordManager:
 
     
     def get_one_character(self, word_id: int, index: int) -> str:
-        # TODO: index 위치의 한 글자 확인하는 로직 구현
-        return self._find_word(word_id)["word"][0]
+        word = self.get_word(word_id)
+        if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < len(word):
+            raise KomantleError(f"글자 위치는 0 ~ {len(word) - 1} 사이여야 합니다.")
+        return word[index]
 
 
     def _find_word(self, word_id: int) -> dict:
-        for word_dict in self.word_list:
-            if word_id == word_dict["word_id"]:
-                return word_dict
-        return {}
+        if isinstance(word_id, bool) or not isinstance(word_id, int) or word_id not in self._words_by_rank:
+            raise KomantleError(f"{word_id}위 단어 정보를 찾을 수 없습니다. 0 ~ 1000 사이 순위를 확인해주세요.")
+        return self._words_by_rank[word_id]
 
 
-def main():
+def _run():
     # TODO: 메인 로직 복잡도 이슈
     # - print 문 너무 많이 사용됨 -> 공통화 필요
     # - while 및 if 문 너무 많이 사용됨 -> 간소화 필요
     print("      +----------------------------+")
     print("      | Hello I'm Komantle Helper! |")
     print("      +----------------------------+")
-    print("(\_/)  ")
+    print(r"(\_/)  ")
     print("( •‿•) ")
-    print("/ > <\ ")
+    print(r"/ > <\ ")
 
     komantle_no = (datetime.now(tz=SEOUL_TIME_ZONE) - KOMANTLE_START_DATE).days
 
@@ -220,7 +265,11 @@ def main():
                     if 0 <= word_id <= 1000:
                         target_name = "정답" if word_id == 0 else f"{word_id}위"
                         func_name = command_map[command]["name"]
-                        func_value = command_map[command]["func"](word_id)
+                        try:
+                            func_value = command_map[command]["func"](word_id)
+                        except KomantleError as error:
+                            print(error)
+                            break
 
                         print(f"{target_name} 단어의 {func_name}는(은) '{func_value}' 입니다.")
                         break
@@ -234,5 +283,16 @@ def main():
             print("잘못된 명령어 입니다. 다시 입력해주세요.")
 
 
+def main():
+    try:
+        _run()
+    except KomantleError as error:
+        print(error)
+        return 1
+    except (EOFError, KeyboardInterrupt):
+        print("\n프로그램을 종료합니다.")
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
