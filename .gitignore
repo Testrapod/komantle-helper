@@ -6,3 +6,11 @@
 
 __pycache__/
 .venv/
+.archive/
+.demo-archive/
+dist/
+.preview/
+node_modules/
+test-results/
+playwright-report/
+collection-result.json

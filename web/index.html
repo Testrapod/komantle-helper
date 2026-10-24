@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f5ef">
+  <meta name="description" content="꼬맨틀이 막힐 때, 필요한 만큼만 힌트를 확인하세요. 품사, 초성, 길이와 한 글자 힌트를 제공합니다.">
+  <title>꼬맨틀 헬퍼 · 힌트 한 조각</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">힌트 도구로 이동</a>
+  <div class="shell">
+    <header class="header">
+      <a class="brand" href="./" aria-label="꼬맨틀 헬퍼 홈"><span class="brand-mark" aria-hidden="true">ㄲ</span> 꼬맨틀 헬퍼</a>
+      <nav aria-label="관련 링크">
+        <a href="https://semantle-ko.newsjel.ly/" target="_blank" rel="noopener noreferrer">원본 게임 <span aria-hidden="true">↗</span></a>
+        <a href="https://github.com/Testrapod/komantle-helper" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+    </header>
+    <section class="intro" aria-labelledby="title">
+      <p class="eyebrow"><span class="dot"></span> 오늘의 단어로 가는 작은 실마리</p>
+      <h1 id="title">막힌 순간,<br>힌트 <span>한 조각.</span></h1>
+      <p class="intro-copy">궁금한 만큼만 열어보세요.<br>직접 맞히는 재미는 남겨두고요.</p>
+      <div class="intro-decoration" aria-hidden="true"><span>ㄲ</span><span>ㅁ</span><span>ㅌ</span></div>
+    </section>
+
+    <main id="main" class="workspace">
+      <aside class="session-panel" aria-labelledby="session-title">
+        <p class="eyebrow">01 / 대상 선택</p>
+        <h2 id="session-title">어떤 단어가 궁금한가요?</h2>
+        <label for="round">꼬맨틀 회차</label>
+        <select id="round" disabled><option>회차를 불러오는 중…</option></select>
+        <label for="rank">단어 순위</label>
+        <div class="rank-wrap"><input id="rank" type="number" inputmode="numeric" min="0" max="1000" step="1" value="0" aria-describedby="rank-help rank-error"><span>위</span></div>
+        <p id="rank-help" class="field-help">0은 정답, 1~1000은 유사 단어 순위예요.</p>
+        <p id="rank-error" class="field-error" role="alert" hidden></p>
+        <div class="selection-summary"><span>지금 보고 있는 대상</span><strong id="target">데이터를 불러오는 중</strong></div>
+        <div class="data-status"><span class="status-dot" aria-hidden="true"></span><div><strong id="data-date">데이터 확인 중</strong><p id="collected-at">잠시만 기다려주세요.</p></div></div>
+        <p class="small-note">회차나 순위를 바꾸면<br>열어본 힌트가 모두 닫혀요.</p>
+      </aside>
+
+      <section class="hint-panel" aria-labelledby="hints-title">
+        <div class="section-heading"><div><p class="eyebrow">02 / 필요한 만큼만</p><h2 id="hints-title">작은 힌트부터 열어보세요</h2></div><button id="reset" class="text-button" disabled>모두 닫기 ↺</button></div>
+        <div id="notice" class="notice" role="status" hidden></div>
+        <div id="load-error" class="error-box" role="alert" hidden><p id="error-message"></p><button id="retry" class="secondary-button">다시 불러오기</button></div>
+        <div id="hint-grid" class="hint-grid" aria-busy="true">
+          <article class="hint-card"><div class="card-top"><span class="hint-icon" aria-hidden="true">↔</span><span class="hint-order">01</span></div><h3>단어 길이</h3><p class="hint-description">몇 글자짜리 단어일까요?</p><p class="hint-value" id="value-length" aria-live="polite">아직 열지 않은 힌트</p><button data-hint="length" aria-controls="value-length" aria-expanded="false" disabled>길이 보기 <span aria-hidden="true">+</span></button></article>
+          <article class="hint-card"><div class="card-top"><span class="hint-icon" aria-hidden="true">가</span><span class="hint-order">02</span></div><h3>품사</h3><p class="hint-description">명사일까요, 동사일까요?</p><p class="hint-value" id="value-pos" aria-live="polite">아직 열지 않은 힌트</p><button data-hint="pos" aria-controls="value-pos" aria-expanded="false" disabled>품사 보기 <span aria-hidden="true">+</span></button></article>
+          <article class="hint-card"><div class="card-top"><span class="hint-icon" aria-hidden="true">ㄱ</span><span class="hint-order">03</span></div><h3>초성</h3><p class="hint-description">단어의 첫소리를 모았어요.</p><p class="hint-value" id="value-initial_consonant" aria-live="polite">아직 열지 않은 힌트</p><button data-hint="initial_consonant" aria-controls="value-initial_consonant" aria-expanded="false" disabled>초성 보기 <span aria-hidden="true">+</span></button></article>
+          <article class="hint-card"><div class="card-top"><span class="hint-icon" aria-hidden="true">≈</span><span class="hint-order">04</span></div><h3>유사도</h3><p class="hint-description">정답에 얼마나 가까운 단어일까요?</p><p class="hint-value" id="value-similarity" aria-live="polite">아직 열지 않은 힌트</p><button data-hint="similarity" aria-controls="value-similarity" aria-expanded="false" disabled>유사도 보기 <span aria-hidden="true">+</span></button></article>
+          <article class="hint-card character-card"><div class="card-top"><span class="hint-icon" aria-hidden="true">□</span><span class="hint-order">05</span></div><h3>한 글자</h3><p class="hint-description">원하는 위치의 글자 하나만 확인해요.</p><div class="character-position"><label for="character">공개할 위치</label><input id="character" type="number" inputmode="numeric" min="1" step="1" value="1"><span>번째</span></div><p class="hint-value" id="value-character" aria-live="polite">아직 열지 않은 힌트</p><button data-hint="character" aria-controls="value-character" aria-expanded="false" disabled>한 글자 보기 <span aria-hidden="true">+</span></button></article>
+          <article class="hint-card answer-card"><div class="card-top"><span class="hint-icon" aria-hidden="true">!</span><span class="hint-order">06</span></div><h3>전체 단어</h3><p class="hint-description">마지막 실마리. 단어를 전부 공개해요.</p><p class="answer-note">조금 더 생각해봐도 좋아요.</p><p class="hint-value" id="value-word" aria-live="polite">아직 열지 않은 힌트</p><button data-hint="word" aria-controls="value-word" aria-expanded="false" disabled>전체 단어 보기 <span aria-hidden="true">↗</span></button></article>
+        </div>
+      </section>
+    </main>
+    <footer><p>정답을 향한 한 걸음, 당신의 속도로.</p><p>꼬맨틀의 비공식 힌트 도구입니다. 품사는 자동 분석 결과이며, 공개 데이터에는 전체 단어가 포함됩니다.</p></footer>
+  </div>
+  <dialog id="answer-dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description"><form method="dialog"><span class="dialog-icon" aria-hidden="true">!</span><h2 id="dialog-title">전체 단어를 공개할까요?</h2><p id="dialog-description">선택한 단어가 바로 표시돼요.<br>조금 더 생각해보고 돌아와도 괜찮아요.</p><div class="dialog-actions"><button value="cancel" class="secondary-button" autofocus>더 생각해볼게요</button><button value="reveal" class="primary-button">단어 공개하기</button></div></form></dialog>
+  <noscript><p class="noscript">힌트 도구를 사용하려면 브라우저에서 JavaScript를 켜주세요.</p></noscript>
+</body>
+</html>

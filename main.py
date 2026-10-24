@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import cached_property, lru_cache
 import requests
 from zoneinfo import ZoneInfo
@@ -19,6 +19,19 @@ INITIAL_CONSONANTS = [
     "ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ",
     "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"
 ]
+
+
+def get_today_round(now=None):
+    now = now or datetime.now(SEOUL_TIME_ZONE)
+    if now.tzinfo is None:
+        raise ValueError("시간대가 포함된 시각이 필요합니다.")
+    return (now.astimezone(SEOUL_TIME_ZONE).date() - KOMANTLE_START_DATE.date()).days
+
+
+def get_round_date(number):
+    if type(number) is not int or number < 0:
+        raise ValueError("회차는 0 이상의 정수여야 합니다.")
+    return KOMANTLE_START_DATE.date() + timedelta(days=number)
 
 
 class KomantleError(ValueError):
@@ -106,13 +119,13 @@ class WordManager:
         }
     ]
     """
-    def __init__(self, komantle_no: int):
+    def __init__(self, komantle_no: int, *, request_get=None):
         if isinstance(komantle_no, bool) or not isinstance(komantle_no, int) or komantle_no < 0:
             raise KomantleError("꼬맨틀 회차는 0 이상의 정수여야 합니다.")
         url = f"{KOMANTLE_URL}/{komantle_no}"
 
         try:
-            response = requests.get(url, timeout=REQUEST_TIMEOUT)
+            response = (request_get or requests.get)(url, timeout=REQUEST_TIMEOUT)
             if response.status_code == 404:
                 raise KomantleError(f"{komantle_no}번째 꼬맨틀 정보를 찾을 수 없습니다.")
             if response.status_code == 422:
@@ -198,7 +211,7 @@ def _run():
     print("( •‿•) ")
     print(r"/ > <\ ")
 
-    komantle_no = (datetime.now(tz=SEOUL_TIME_ZONE) - KOMANTLE_START_DATE).days
+    komantle_no = get_today_round()
 
     # 꼬맨틀 회차 선택
     while True:

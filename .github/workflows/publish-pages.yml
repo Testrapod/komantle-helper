@@ -1,0 +1,168 @@
+name: Collect data and publish Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'main.py'
+      - 'requirements.txt'
+      - 'package*.json'
+      - 'playwright.config.js'
+      - '.github/workflows/publish-pages.yml'
+  schedule:
+    - cron: '7 0,1 * * *'
+      timezone: Asia/Seoul
+  workflow_dispatch:
+    inputs:
+      collect:
+        description: Fetch missing recent rounds before publishing
+        type: boolean
+        default: true
+      force_round:
+        description: Optional round number to recollect (today or earlier)
+        type: string
+        default: ''
+
+concurrency:
+  group: komantle-pages-publisher
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    outputs:
+      deploy: ${{ steps.state.outputs.deploy }}
+      code_sha: ${{ steps.code.outputs.sha }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+      - name: Record actual source revision
+        id: code
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: python -m pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - run: npm ci
+      - run: npm test
+      - name: Load persistent archive (initialize only if remote branch is absent)
+        run: python -m scripts.archive_git prepare
+      - name: Collect missing rounds or requested correction
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COLLECT: ${{ inputs.collect }}
+          FORCE_ROUND: ${{ inputs.force_round }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from scripts.collect_data import atomic_write, collect_archive, json_bytes
+          should_collect = os.environ['EVENT_NAME'] == 'schedule' or os.environ['COLLECT'] == 'true' or not Path('.archive/manifest.json').exists()
+          force = os.environ.get('FORCE_ROUND', '').strip()
+          if force and (not force.isascii() or not force.isdigit()):
+              raise SystemExit('force_round must be a non-negative integer')
+          if should_collect or force:
+              result = collect_archive('.archive', force_round=int(force) if force else None)
+              atomic_write('collection-result.json', json_bytes(result))
+              print('Saved rounds:', result['saved_rounds'])
+              print('Failed rounds:', list(result['failed_rounds']))
+          PY
+      - name: Persist successful rounds, including partial collection results
+        run: python -m scripts.archive_git save
+      - name: Decide whether publication is needed
+        id: state
+        env:
+          CODE_SHA: ${{ steps.code.outputs.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = schedule ]; then
+            python -m scripts.publish_state --code-sha "$CODE_SHA" --scheduled
+          else
+            python -m scripts.publish_state --code-sha "$CODE_SHA"
+          fi
+      - name: Require today's data for scheduled publication
+        if: github.event_name == 'schedule' && steps.state.outputs.today_available != 'true'
+        run: |
+          echo 'Today is not available. Successful backfill is saved; the current Pages deployment is preserved.'
+          exit 1
+      - name: Require at least one archived round
+        if: steps.state.outputs.round_count == '0'
+        run: |
+          echo 'No valid archived rounds. The current Pages deployment is preserved.'
+          exit 1
+      - name: Install browser and verify the project URL path
+        if: steps.state.outputs.deploy == 'true'
+        run: |
+          npx playwright install --with-deps chromium
+          python -m scripts.demo_data
+          python -m scripts.build_site --archive-dir .demo-archive --output .preview/komantle-helper
+          npm run test:e2e
+      - name: Build complete archive and web assets
+        if: steps.state.outputs.deploy == 'true'
+        run: python -m scripts.build_site
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        if: steps.state.outputs.deploy == 'true'
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - name: Deploy complete artifact
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+
+  record-success:
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.build.outputs.code_sha }}
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - run: python -m scripts.archive_git prepare
+      - name: Record successful code and data combination
+        env:
+          CODE_SHA: ${{ needs.build.outputs.code_sha }}
+        run: |
+          python -m scripts.publish_state --code-sha "$CODE_SHA" --record-success
+          python -m scripts.archive_git save

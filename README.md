@@ -2,7 +2,51 @@
 [꼬맨틀](https://semantle-ko.newsjel.ly/)을 더 재미있게(?) 즐길 수 있도록 여러가지 도움을 주는 프로그램 입니다.
 
 순위 0(정답) ~ 1000의 단어, 품사, 초성, 글자 수, 유사도를 조회합니다.
-현재는 터미널 프로그램이며 GitHub Pages 웹 버전은 아직 구현하지 않았습니다.
+터미널 프로그램과 GitHub Pages용 정적 웹 버전을 제공합니다.
+
+## 웹 버전
+
+웹에서는 회차와 순위를 선택한 뒤 길이·품사·초성·유사도·한 글자·전체 단어를 개별 공개합니다.
+회차 또는 순위를 바꾸면 공개 상태가 초기화되며, 전체 단어는 확인창을 거쳐 공개합니다.
+
+데이터는 GitHub Actions의 Python·Java 환경에서 생성하고 별도 `data` 브랜치에 누적 보관합니다.
+GitHub Pages는 웹 자원과 보관 JSON을 함께 제공합니다. 방문자는 Python이나 Java를 설치할 필요가 없습니다.
+정답을 화면에서 숨겨도 JSON에는 포함됩니다. 품사는 기존 Okt 자동 분석 규칙을 사용합니다.
+
+### 로컬에서 실제 데이터로 실행
+
+아래 명령은 Python 실행 환경을 준비한 후 저장소 루트에서 실행합니다.
+
+```sh
+source .venv/bin/activate
+python -m scripts.collect_data --archive-dir .archive
+python -m scripts.build_site --archive-dir .archive --output dist
+python3 -m http.server 4173 --bind 127.0.0.1 --directory dist
+```
+
+브라우저에서 <http://127.0.0.1:4173/>를 엽니다. 첫 수집에는 인터넷과 Java가 필요합니다.
+기존 정상 회차는 다시 수집하지 않으며, 수정하려면 `--force-round 1667`처럼 명시합니다.
+수집 결과의 `failed_rounds`와 `today_available`도 확인하세요. 회차별 실패가 있어도 성공한 데이터는 보존합니다.
+
+### API·Java 없이 화면 확인
+
+```sh
+python -m scripts.demo_data
+python -m scripts.build_site --archive-dir .demo-archive --output .preview/komantle-helper
+python3 -m http.server 4173 --bind 127.0.0.1 --directory .preview
+```
+
+<http://127.0.0.1:4173/komantle-helper/>에서 합성 예시 데이터를 확인할 수 있습니다.
+`.demo-archive`는 UI 검증용이며 실제 배포에 사용하지 않습니다.
+
+### GitHub Pages 운영
+
+저장소의 Pages Source를 **GitHub Actions**로 설정하고, `main`에 워크플로가 반영된 뒤
+**Collect data and publish Pages**를 수동 실행하면 첫 수집과 배포가 진행됩니다.
+이후 매일 00:07 및 01:07 한국 시간에 누락 데이터를 수집하고 필요한 경우 배포합니다.
+예약은 지연될 수 있으며, 오늘 데이터가 없으면 사이트에 갱신 대기를 표시합니다.
+
+설정·권한·장애 복구는 [웹 배포 운영 안내](docs/github-pages-operations.md)를 참고하세요.
 
 ## 실행 환경
 
@@ -40,14 +84,23 @@ API는 조회 가능한 회차에 제한이 있습니다. 2026-10-24 확인 시 
 ## 테스트
 
 ```sh
-# 오프라인 회귀 테스트 22개. 실제 API 테스트 1개는 기본적으로 건너뜁니다.
+# CLI·수집·누적 보관·빌드·Git 통합 테스트. 실제 API 테스트는 기본적으로 건너뜁니다.
 python -m unittest discover -s tests -v
 
 # 실제 API와 Java로 오늘 1,001개 단어의 모든 힌트 및 어제 회차 검증
 KOMANTLE_LIVE_TEST=1 python -m unittest discover -s tests -v
 
 python -m pip check
+
+# 웹 단위 및 실제 브라우저 테스트 (Node.js 24 사용)
+npm ci
+npm test
+npx playwright install chromium
+python -m scripts.demo_data
+python -m scripts.build_site --archive-dir .demo-archive --output .preview/komantle-helper
+npm run test:e2e
 ```
 
 2026-10-24 기준 기존 버전과 수정 버전의 실제 CLI 동작을 확인했습니다.
 수정 사항과 웹사이트 전환 검토는 [검증 및 GitHub Pages 전환 보고서](docs/github-pages-review.md)에 정리했습니다.
+구조, 데이터 보관, 웹 기능, 자동 배포와 단계별 완료 기준은 [GitHub Pages 웹 버전 구현 계획](docs/github-pages-plan.md)에 정리했습니다.

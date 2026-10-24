@@ -1,0 +1,13 @@
+{
+  "name": "komantle-helper-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/web/*.test.js",
+    "test:e2e": "playwright test",
+    "preview": "python3 -m scripts.serve_preview --directory .preview"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.0"
+  }
+}
