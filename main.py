@@ -2,6 +2,8 @@ from datetime import datetime, timedelta
 from functools import cached_property, lru_cache
 import requests
 from zoneinfo import ZoneInfo
+import argparse
+import sys
 
 from konlpy.tag import Okt
 
@@ -257,12 +259,16 @@ def _run():
         print("원하시는 명령어를 입력해 주세요.")
         for key, value in command_map.items():
             print(f"{key}. {value['name']} 확인")
+        print("G. 게임하기")
         print("Q. 종료")
         command = input("> ").strip().upper()
 
         if command == "Q":
             print("프로그램을 종료합니다. 도움이 되셨길 바랍니다~ (_ _)")
             break
+        elif command == "G":
+            from game import run_game
+            run_game(komantle_no, word_manager)
         elif command in ["1", "2", "3", "4", "5"]:
             while True:
                 print("")
@@ -296,9 +302,21 @@ def _run():
             print("잘못된 명령어 입니다. 다시 입력해주세요.")
 
 
-def main():
+def main(argv=()):
+    parser = argparse.ArgumentParser(description='꼬맨틀 힌트 조회 및 게임')
+    parser.add_argument('--play', action='store_true', help='게임 모드로 바로 시작')
+    parser.add_argument('--round', type=int, dest='round_number', help='게임 회차 (기본: 오늘)')
+    parser.add_argument('--state-dir', help='CLI 게임 기록 저장 폴더')
+    args = parser.parse_args(argv)
+    if not args.play and (args.round_number is not None or args.state_dir is not None):
+        parser.error('--round와 --state-dir는 --play와 함께 사용하세요.')
     try:
-        _run()
+        if args.play:
+            from game import run_game
+            number = get_today_round() if args.round_number is None else args.round_number
+            run_game(number, WordManager(number), state_dir=args.state_dir)
+        else:
+            _run()
     except KomantleError as error:
         print(error)
         return 1
@@ -308,4 +326,4 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

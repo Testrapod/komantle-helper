@@ -11,6 +11,14 @@
 웹에서는 회차와 순위를 선택한 뒤 길이·품사·초성·유사도·한 글자·전체 단어를 개별 공개합니다.
 회차 또는 순위를 바꾸면 공개 상태가 초기화되며, 전체 단어는 확인창을 거쳐 공개합니다.
 
+같은 화면에서 단어를 입력해 직접 게임을 진행할 수 있습니다. 추측 기록은 유사도 순으로 표시하며,
+정답 판정·중복 입력 방지·포기·새로고침 후 이어하기를 지원합니다.
+기록은 브라우저의 localStorage에 회차별로 저장되고 원본 사이트나 CLI 기록과 동기화하지 않습니다.
+
+보관된 단어는 JSON의 점수를 사용하고, 그 밖의 단어는 별도 채점 API를 통해 원본 점수를 조회합니다.
+원본의 조회 기간이 지난 회차에서 보관되지 않은 단어는 채점할 수 없으며, 실패한 추측은 횟수에 포함하지 않습니다.
+채점 API의 소스·배포 방법은 [backend 안내](backend/README.md)에 정리했습니다.
+
 데이터는 GitHub Actions의 Python·Java 환경에서 생성하고 별도 `data` 브랜치에 누적 보관합니다.
 GitHub Pages는 웹 자원과 보관 JSON을 함께 제공합니다. 방문자는 Python이나 Java를 설치할 필요가 없습니다.
 정답을 화면에서 숨겨도 JSON에는 포함됩니다. 품사는 기존 Okt 자동 분석 규칙을 사용합니다.
@@ -40,6 +48,8 @@ python3 -m http.server 4173 --bind 127.0.0.1 --directory .preview
 
 <http://127.0.0.1:4173/komantle-helper/>에서 합성 예시 데이터를 확인할 수 있습니다.
 `.demo-archive`는 UI 검증용이며 실제 배포에 사용하지 않습니다.
+합성 데이터에 없는 단어를 입력하면 실제 채점 API를 사용하려 하므로, 완전히 오프라인으로
+확인하려면 예시 단어 `과일`을 사용하거나 브라우저 테스트의 모의 응답을 사용하세요.
 
 ### GitHub Pages 운영
 
@@ -67,6 +77,18 @@ python3 -m http.server 4173 --bind 127.0.0.1 --directory .preview
 source .venv/bin/activate
 python main.py
 ```
+
+게임으로 바로 시작하려면:
+
+```sh
+python main.py --play
+python main.py --play --round 1667
+python main.py --play --state-dir /tmp/komantle-game-records
+```
+
+기존 힌트 메뉴의 `G`로도 게임에 들어갈 수 있습니다. 게임 중에는 `/기록`, `/포기`, `/돌아가기`를
+사용합니다. CLI 기록의 기본 경로는 `~/.local/state/komantle-helper/game-<회차>.json`이며
+`--state-dir` 또는 `KOMANTLE_STATE_DIR`로 변경할 수 있습니다. 게임 채점에는 Java가 필요하지 않습니다.
 
 다른 환경에서 새로 설치하려면 (`uv` 필요):
 

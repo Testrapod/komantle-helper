@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f6f5ef">
-  <meta name="description" content="꼬맨틀이 막힐 때, 필요한 만큼만 힌트를 확인하세요. 품사, 초성, 길이와 한 글자 힌트를 제공합니다.">
+  <meta name="description" content="여기서 직접 꼬맨틀을 풀고 필요한 만큼만 힌트를 확인하세요. 단어 채점, 회차별 기록과 여섯 가지 힌트를 제공합니다.">
   <title>꼬맨틀 헬퍼 · 힌트 한 조각</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./styles.css">
@@ -43,7 +43,16 @@
       </aside>
 
       <section class="hint-panel" aria-labelledby="hints-title">
-        <div class="section-heading"><div><p class="eyebrow">02 / 필요한 만큼만</p><h2 id="hints-title">작은 힌트부터 열어보세요</h2></div><button id="reset" class="text-button" disabled>모두 닫기 ↺</button></div>
+        <section class="game-panel" aria-labelledby="game-title">
+          <div class="section-heading"><div><p class="eyebrow">02 / 직접 맞혀보기</p><h2 id="game-title">오늘의 단어, 여기서 풀어보세요</h2></div><span id="game-count" class="game-count">0번 추측</span></div>
+          <form id="guess-form" class="guess-form"><label for="guess-word">추측할 단어</label><div class="guess-input-row"><input id="guess-word" type="text" autocomplete="off" spellcheck="false" maxlength="128" placeholder="떠오르는 단어를 입력하세요" aria-describedby="game-message game-warning" disabled><button id="guess-submit" class="primary-button" disabled>추측하기 →</button></div></form>
+          <p id="game-message" class="game-message" role="status">회차 데이터를 불러오면 게임을 시작할 수 있어요.</p>
+          <p id="game-warning" class="game-warning" role="status" hidden></p>
+          <div id="game-history" class="game-history" hidden><table><caption>추측 기록 · 유사도가 높은 순서</caption><thead><tr><th scope="col">시도</th><th scope="col">단어</th><th scope="col">유사도</th><th scope="col">순위</th></tr></thead><tbody id="guess-rows"></tbody></table></div>
+          <p id="game-empty" class="game-empty">아직 추측한 단어가 없어요.<br>첫 단어에서 실마리를 찾아보세요.</p>
+          <div class="game-footer"><p>기록은 이 브라우저에 회차별로 저장돼요.<br>지난 회차는 원본의 채점 기간이 지나면 보관된 단어만 채점할 수 있어요.</p><button id="give-up" type="button" class="text-button" disabled>정답 보고 포기하기</button></div>
+        </section>
+        <div class="section-heading"><div><p class="eyebrow">03 / 필요한 만큼만</p><h2 id="hints-title">작은 힌트부터 열어보세요</h2></div><button id="reset" class="text-button" disabled>모두 닫기 ↺</button></div>
         <div id="notice" class="notice" role="status" hidden></div>
         <div id="load-error" class="error-box" role="alert" hidden><p id="error-message"></p><button id="retry" class="secondary-button">다시 불러오기</button></div>
         <div id="hint-grid" class="hint-grid" aria-busy="true">
@@ -59,6 +68,7 @@
     <footer><p>정답을 향한 한 걸음, 당신의 속도로.</p><p>꼬맨틀의 비공식 힌트 도구입니다. 품사는 자동 분석 결과이며, 공개 데이터에는 전체 단어가 포함됩니다.</p></footer>
   </div>
   <dialog id="answer-dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description"><form method="dialog"><span class="dialog-icon" aria-hidden="true">!</span><h2 id="dialog-title">전체 단어를 공개할까요?</h2><p id="dialog-description">선택한 단어가 바로 표시돼요.<br>조금 더 생각해보고 돌아와도 괜찮아요.</p><div class="dialog-actions"><button value="cancel" class="secondary-button" autofocus>더 생각해볼게요</button><button value="reveal" class="primary-button">단어 공개하기</button></div></form></dialog>
+  <dialog id="give-up-dialog" aria-labelledby="give-up-title"><form method="dialog"><span class="dialog-icon" aria-hidden="true">!</span><h2 id="give-up-title">이번 회차를 마칠까요?</h2><p>정답을 공개하고 게임을 포기합니다.<br>추측 기록은 그대로 남아요.</p><div class="dialog-actions"><button value="cancel" class="secondary-button" autofocus>계속 풀어볼게요</button><button value="giveup" class="primary-button">정답 보고 포기하기</button></div></form></dialog>
   <noscript><p class="noscript">힌트 도구를 사용하려면 브라우저에서 JavaScript를 켜주세요.</p></noscript>
 </body>
 </html>
