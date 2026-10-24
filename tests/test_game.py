@@ -36,6 +36,19 @@ class ScoringTests(unittest.TestCase):
             with self.subTest(payload=payload), self.assertRaises(GameError):
                 score_upstream(1, '사과', request_get=Mock(return_value=response(payload)))
 
+    def test_top_scores_and_live_scores_use_the_same_scale(self):
+        raw = .2421453297138214
+        manager = main.WordManager(1667, request_get=Mock(return_value=response({
+            'key': '사과', 'top_scores': [[897, '토마토', raw]],
+        })))
+        live = score_upstream(1667, '토마토', request_get=Mock(return_value=response({
+            'guess': '토마토', 'sim': raw, 'rank': 897,
+        })))
+        self.assertAlmostEqual(manager.get_similarity(897), 24.21453297138214)
+        with tempfile.TemporaryDirectory() as state:
+            cached = GameSession(1667, manager, state_dir=state).submit('토마토')
+        self.assertEqual(cached, live)
+
 
 class SessionTests(unittest.TestCase):
     def setUp(self):
@@ -88,6 +101,22 @@ class SessionTests(unittest.TestCase):
             game.submit('과일')
         self.assertEqual(len(game.guesses), 1)
         self.assertTrue(game.storage_warning)
+
+    def test_restore_corrects_cached_scores_without_changing_live_scores_or_attempts(self):
+        game = self.session()
+        game.submit('과일')
+        game.submit('바다')
+        saved = json.loads(game.path.read_text())
+        saved['guesses'][0]['similarity'] = .5125
+        saved['guesses'][1]['similarity'] = .25
+        saved['given_up'] = True
+        game.path.write_text(json.dumps(saved))
+        restored = self.session()
+        self.assertAlmostEqual(restored.guesses[0].similarity, 51.25)
+        self.assertEqual(restored.guesses[1].similarity, .25)
+        self.assertEqual(len(restored.guesses), 2)
+        self.assertTrue(restored.given_up)
+        self.assertAlmostEqual(json.loads(game.path.read_text())['guesses'][0]['similarity'], 51.25)
 
     def test_cli_guess_history_and_win(self):
         with patch('builtins.input', side_effect=['과일', '/기록', '과일', '사과']), patch('sys.stdout', new_callable=io.StringIO) as output:

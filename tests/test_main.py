@@ -8,7 +8,7 @@ import requests
 import main
 
 
-SAMPLE = {"key": "사과", "top_scores": [[1, "과일", 51.25], [1000, "까치", 12.0]]}
+SAMPLE = {"key": "사과", "top_scores": [[1, "과일", .5125], [1000, "까치", .12]]}
 
 
 def response(data=None, status=200):
@@ -68,7 +68,7 @@ class WordManagerTests(unittest.TestCase):
         self.assertEqual(manager.get_initial_consonant(1000), "ㄲㅊ")
         self.assertEqual(manager.get_length(1), 2)
         self.assertEqual(manager.get_similarity(0), 100.0)
-        self.assertEqual(manager.get_similarity(1), 51.25)
+        self.assertAlmostEqual(manager.get_similarity(1), 51.25)
         with patch.object(main.Word, "_get_pos", return_value="명사"):
             self.assertEqual(manager.get_pos(1), "명사")
 
@@ -151,7 +151,7 @@ class WordManagerTests(unittest.TestCase):
         for scores in ([[1]], [[0, "과일", 1]], [[1001, "과일", 1]],
                        [[1, "과일", 1], [1, "포도", 2]], [[1, None, 1]],
                        [[1, "과일", "oops"]], [[1, "과일", float("nan")]],
-                       [[1, "과일", float("inf")]], [[1, "과일", 101]]):
+                       [[1, "과일", float("inf")]], [[1, "과일", 1.01]], [[1, "과일", -1.01]]):
             payloads.append({"key": "사과", "top_scores": scores})
         for payload in payloads:
             self.get.return_value = response(payload)

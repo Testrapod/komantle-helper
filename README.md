@@ -19,6 +19,12 @@
 원본의 조회 기간이 지난 회차에서 보관되지 않은 단어는 채점할 수 없으며, 실패한 추측은 횟수에 포함하지 않습니다.
 채점 API의 소스·배포 방법은 [backend 안내](backend/README.md)에 정리했습니다.
 
+원본 `top_scores`와 `guess` API의 유사도는 -1~1이며, 수집·채점 경계에서 ×100하여
+화면·보관 JSON·게임 기록을 모두 -100~100 단위로 통일합니다.
+기존 아카이브는 배포 시 `python -m scripts.migrate_similarity`로 한 번 변환합니다.
+변환된 JSON은 `similarity_scale: 100`으로 구분하고, 이전 파일은 보존합니다.
+웹·CLI의 기존 추측 기록은 회차 데이터를 기준으로 점수를 정정하며 시도 횟수와 게임 상태를 유지합니다.
+
 데이터는 GitHub Actions의 Python·Java 환경에서 생성하고 별도 `data` 브랜치에 누적 보관합니다.
 GitHub Pages는 웹 자원과 보관 JSON을 함께 제공합니다. 방문자는 Python이나 Java를 설치할 필요가 없습니다.
 정답을 화면에서 숨겨도 JSON에는 포함됩니다. 품사는 기존 Okt 자동 분석 규칙을 사용합니다.
@@ -30,6 +36,7 @@ GitHub Pages는 웹 자원과 보관 JSON을 함께 제공합니다. 방문자�
 ```sh
 source .venv/bin/activate
 python -m scripts.collect_data --archive-dir .archive
+python -m scripts.migrate_similarity --archive-dir .archive
 python -m scripts.build_site --archive-dir .archive --output dist
 python3 -m http.server 4173 --bind 127.0.0.1 --directory dist
 ```

@@ -159,10 +159,11 @@ class WordManager:
                 if not isinstance(text, str) or not text:
                     raise ValueError("Invalid word")
                 similarity = float(score)
-                if not -100 <= similarity <= 100:
+                if not -1 <= similarity <= 1:
                     raise ValueError("Invalid similarity")
                 seen_ranks.add(rank)
-                self.word_list.append({"word_id": rank, "word": Word(text), "similarity": similarity})
+                # top_scores도 guess API와 같은 -1~1 원시 값을 반환한다.
+                self.word_list.append({"word_id": rank, "word": Word(text), "similarity": similarity * 100})
         except (ValueError, KeyError, TypeError) as error:
             raise KomantleError("꼬맨틀 서버의 응답 형식이 올바르지 않습니다.") from error
 

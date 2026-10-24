@@ -68,6 +68,8 @@ jobs:
       - run: npm test
       - name: Load persistent archive (initialize only if remote branch is absent)
         run: python -m scripts.archive_git prepare
+      - name: Normalize previously archived similarity scores
+        run: python -m scripts.migrate_similarity
       - name: Collect missing rounds or requested correction
         env:
           EVENT_NAME: ${{ github.event_name }}

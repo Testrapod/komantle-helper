@@ -32,8 +32,17 @@ test('manifest rejects traversal paths, duplicates and unsupported schemas', () 
 });
 
 test('round validates completeness and refuses inconsistent words', () => {
-  const data = { schema_version: 1, round: 1667, date: '2026-10-24', timezone: 'Asia/Seoul', collected_at: '2026-10-24T00:07:00+09:00', words: Array.from({ length: 1001 }, (_, rank) => ({ rank, word: '사과', length: 2, pos: '명사', initial_consonant: 'ㅅㄱ', similarity: rank === 0 ? 100 : 50 })) };
+  const data = { schema_version: 1, similarity_scale: 100, round: 1667, date: '2026-10-24', timezone: 'Asia/Seoul', collected_at: '2026-10-24T00:07:00+09:00', words: Array.from({ length: 1001 }, (_, rank) => ({ rank, word: '사과', length: 2, pos: '명사', initial_consonant: 'ㅅㄱ', similarity: rank === 0 ? 100 : 50 })) };
   assert.equal(validateRound(data, 1667), data);
+  const legacy = structuredClone(data);
+  delete legacy.similarity_scale;
+  for (const row of legacy.words) if (row.rank) row.similarity = .2421453297138214;
+  const corrected = validateRound(legacy, 1667);
+  assert.equal(corrected.words[0].similarity, 100);
+  assert.equal(corrected.words[897].similarity.toFixed(2), '24.21');
+  assert.equal(corrected.similarity_scale, 100);
+  assert.equal(validateRound(corrected, 1667), corrected);
+  assert.throws(() => validateRound({ ...data, similarity_scale: 1 }, 1667));
   assert.throws(() => validateRound({ ...data, words: data.words.slice(1) }, 1667));
   const copy = structuredClone(data); copy.words[1].rank = 0;
   assert.throws(() => validateRound(copy, 1667));
