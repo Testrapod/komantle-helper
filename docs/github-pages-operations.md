@@ -1,5 +1,22 @@
 # 웹 버전 배포 및 운영
 
+## 최초 배포 검증 기록
+
+2026-10-24 (Asia/Seoul)에 [구현 PR #1](https://github.com/Testrapod/komantle-helper/pull/1)을
+병합하고 [첫 발행 워크플로](https://github.com/Testrapod/komantle-helper/actions/runs/40085308073)의
+build·deploy·record-success 전체 성공을 확인했다.
+
+- 공개 URL: [꼬맨틀 헬퍼](https://testrapod.github.io/komantle-helper/).
+- GitHub Ubuntu 환경에서 Python 테스트 33개, Node 테스트 5개, Chromium 시나리오 8개 통과.
+- Linux의 Java 21 + Okt 대표 단어 분석 성공.
+- 실제 1665~1667회 각각 1,001개 단어 수집 및 품사 분석, `data` 브랜치 영구 저장 성공.
+- 공개 URL에서 HTML·CSS·JavaScript·아이콘 HTTP 200과 세 회차 JSON의 SHA256·완전성 검사 통과.
+- 브라우저에서 실제 URL의 회차 선택과 초기 힌트 숨김 화면 확인.
+- [수동 재실행](https://github.com/Testrapod/komantle-helper/actions/runs/40085497197)에서
+  추가 수집 0개·실패 0개, `deploy=false`와 배포 job 생략 확인.
+
+첫 수동·push 발행은 검증했으며, 다음 날짜의 예약 수집 성공은 별도로 확인해야 한다.
+
 ## 구조
 
 - `main`: CLI, 웹 소스, 테스트, 빌드·배포 도구.
