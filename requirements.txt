@@ -1,2 +1,2 @@
-konlpy==0.6.0
-requests==2.34.2
+# CLI와 데이터 수집기(Java/Okt 분석 포함)의 개발 환경
+-e .[analysis]

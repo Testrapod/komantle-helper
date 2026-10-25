@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from main import Word
+from komantle_helper.core import Word
 from scripts.collect_data import collect_archive
 
 

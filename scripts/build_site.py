@@ -8,7 +8,8 @@ import re
 import shutil
 import tempfile
 
-from scripts.collect_data import load_archive, read_round
+from komantle_helper.archive import read_round
+from scripts.collect_data import load_archive
 
 ROOT = Path(__file__).resolve().parents[1]
 

@@ -8,8 +8,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from main import Word, get_round_date, get_today_round
-from scripts.collect_data import collect_archive, export_round, load_archive, read_round, validate_round
+from komantle_helper.core import Word, get_round_date, get_today_round
+from komantle_helper.archive import read_round, validate_round
+from scripts.collect_data import collect_archive, export_round, load_archive
 from scripts.demo_data import demo_manager
 from scripts.build_site import build_site
 from scripts.publish_state import publication_state

@@ -1,5 +1,4 @@
 from dataclasses import asdict
-import io
 import json
 from pathlib import Path
 import tempfile
@@ -7,9 +6,10 @@ import unittest
 from unittest.mock import Mock, patch
 
 import requests
-import main
-from game import GameError, GameSession, Guess, normalize_word, run_game, score_upstream
-from test_main import response, SAMPLE
+from komantle_helper.data import fetch_round
+from komantle_helper.core import RoundData
+from komantle_helper.game import GameError, GameSession, Guess, normalize_word, score_upstream
+from test_core import response, SAMPLE
 
 
 class ScoringTests(unittest.TestCase):
@@ -38,7 +38,7 @@ class ScoringTests(unittest.TestCase):
 
     def test_top_scores_and_live_scores_use_the_same_scale(self):
         raw = .2421453297138214
-        manager = main.WordManager(1667, request_get=Mock(return_value=response({
+        manager = fetch_round(1667, request_get=Mock(return_value=response({
             'key': '사과', 'top_scores': [[897, '토마토', raw]],
         })))
         live = score_upstream(1667, '토마토', request_get=Mock(return_value=response({
@@ -46,7 +46,7 @@ class ScoringTests(unittest.TestCase):
         })))
         self.assertAlmostEqual(manager.get_similarity(897), 24.21453297138214)
         with tempfile.TemporaryDirectory() as state:
-            cached = GameSession(1667, manager, state_dir=state).submit('토마토')
+            cached = GameSession(manager, state_dir=state).submit('토마토')
         self.assertEqual(cached, live)
 
 
@@ -54,12 +54,12 @@ class SessionTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        with patch('main.requests.get', return_value=response()):
-            self.manager = main.WordManager(10)
+        with patch('komantle_helper.data.requests.get', return_value=response()):
+            self.manager = fetch_round(10)
         self.scorer = Mock(return_value=Guess('바다', 8.5, None, False))
 
     def session(self, number=10):
-        return GameSession(number, self.manager, state_dir=self.temp.name, scorer=self.scorer)
+        return GameSession(RoundData(number, self.manager.word_list), state_dir=self.temp.name, scorer=self.scorer)
 
     def test_cached_scoring_duplicate_win_and_resume(self):
         game = self.session()
@@ -97,7 +97,7 @@ class SessionTests(unittest.TestCase):
 
     def test_storage_failure_keeps_playable_session(self):
         game = self.session()
-        with patch('game.os.replace', side_effect=OSError('full')):
+        with patch('komantle_helper.game.os.replace', side_effect=OSError('full')):
             game.submit('과일')
         self.assertEqual(len(game.guesses), 1)
         self.assertTrue(game.storage_warning)
@@ -117,14 +117,3 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(len(restored.guesses), 2)
         self.assertTrue(restored.given_up)
         self.assertAlmostEqual(json.loads(game.path.read_text())['guesses'][0]['similarity'], 51.25)
-
-    def test_cli_guess_history_and_win(self):
-        with patch('builtins.input', side_effect=['과일', '/기록', '과일', '사과']), patch('sys.stdout', new_callable=io.StringIO) as output:
-            run_game(10, self.manager, state_dir=self.temp.name)
-        self.assertIn('이미 입력한 단어', output.getvalue())
-        self.assertIn('2번 만에 정답', output.getvalue())
-
-    def test_cli_play_entrypoint_and_giveup_cancel(self):
-        with patch('main.requests.get', return_value=response()), patch('builtins.input', side_effect=['/포기', 'n', '/돌아가기']), patch('sys.stdout', new_callable=io.StringIO):
-            self.assertEqual(main.main(['--play', '--round', '10', '--state-dir', self.temp.name]), 0)
-        self.assertFalse(self.session().given_up)

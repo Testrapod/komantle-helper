@@ -4,8 +4,8 @@ from dataclasses import asdict, dataclass
 import json
 import math
 import os
-from pathlib import Path
 import re
+from pathlib import Path
 import tempfile
 import unicodedata
 from urllib.parse import quote
@@ -23,7 +23,7 @@ def normalize_word(value):
     if not isinstance(value, str):
         raise GameError("단어를 입력해주세요.")
     word = unicodedata.normalize('NFC', value.strip()).lower()
-    if not word or len(word) > 64 or any(c.isspace() or ord(c) < 32 for c in word):
+    if not word or len(word) > 64 or any(c.isspace() or unicodedata.category(c) == 'Cc' for c in word):
         raise GameError("공백 없이 1~64글자의 단어를 입력해주세요.")
     return word
 
@@ -76,24 +76,39 @@ def score_upstream(number, text, *, request_get=None):
 
 
 class GameSession:
-    def __init__(self, number, word_manager, *, state_dir=None, scorer=score_upstream):
-        self.number, self.scorer = number, scorer
-        self.answer = word_manager.get_word(0)
-        self.words = {}
-        for entry in sorted(word_manager.word_list, key=lambda row: row['word_id']):
-            self.words.setdefault(normalize_word(entry['word'].word), entry)
-        self.path = Path(state_dir or os.environ.get('KOMANTLE_STATE_DIR', Path.home() / '.local/state/komantle-helper')) / f'game-{number}.json'
+    def __init__(self, data, *, state_dir=None, scorer=score_upstream):
+        self.number, self.scorer = data.number, scorer
+        self.answer = data.get_word(0)
+        self.words = index_words(data)
+        self.path = state_directory(state_dir) / f'game-{self.number}.json'
         self.guesses, self.given_up, self.storage_warning = [], False, ''
         self._restore()
+
+    def rebind(self, data):
+        """갱신된 단어 데이터에 연결하되 저장 실패한 메모리 기록도 보존한다."""
+        if data.number != self.number:
+            raise GameError('다른 회차 데이터에는 기록을 연결할 수 없습니다.')
+        answer, words = data.get_word(0), index_words(data)
+        guesses = []
+        for guess in self.guesses:
+            cached = words.get(guess.word)
+            updated = Guess(guess.word, cached['similarity'], cached['word_id'], cached['word_id'] == 0) if cached else guess
+            if updated.correct != (guess.word == normalize_word(answer)):
+                raise GameError('회차 정답 데이터가 변경됐어요. 기록을 확인한 후 다시 시작해주세요.')
+            guesses.append(updated)
+        changed = guesses != self.guesses
+        self.answer, self.words, self.guesses = answer, words, guesses
+        if changed:
+            self._save()
 
     @property
     def won(self):
         return any(guess.correct for guess in self.guesses)
 
     def _restore(self):
-        if not self.path.exists():
-            return
         try:
+            if not self.path.exists():
+                return
             data = json.loads(self.path.read_text())
             if data['schema_version'] != 1 or data['round'] != self.number or type(data['given_up']) is not bool or not isinstance(data['guesses'], list) or len(data['guesses']) > 1000:
                 raise ValueError()
@@ -132,9 +147,17 @@ class GameSession:
             self.storage_warning = '기록을 파일에 저장하지 못했습니다. 이번 실행에서는 계속 플레이할 수 있어요.'
         finally:
             if temporary:
-                temporary.unlink(missing_ok=True)
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
-    def submit(self, text):
+    @property
+    def finished(self):
+        return self.won or self.given_up
+
+    def prepare(self, text):
+        """채점은 파일을 변경하지 않는다. 취소된 작업은 결과를 버릴 수 있다."""
         if self.won or self.given_up:
             raise GameError('이미 끝난 게임입니다. 다른 회차를 선택해주세요.')
         word = normalize_word(text)
@@ -144,11 +167,23 @@ class GameSession:
             raise GameError('회차당 최대 1,000번까지 추측할 수 있습니다.')
         row = self.words.get(word)
         guess = Guess(word, row['similarity'], row['word_id'], row['word_id'] == 0) if row else self.scorer(self.number, word)
-        if guess.correct != (word == normalize_word(self.answer)):
+        valid_rank = guess.rank is None or (type(guess.rank) is int and 0 <= guess.rank <= 1000)
+        valid_score = type(guess.similarity) in (int, float) and math.isfinite(guess.similarity) and -100 <= guess.similarity <= 100
+        if (guess.word != word or type(guess.correct) is not bool or not valid_score or not valid_rank
+                or guess.correct != (guess.rank == 0) or (guess.correct and guess.similarity != 100)
+                or guess.correct != (word == normalize_word(self.answer))):
             raise GameError('채점 결과와 회차 데이터가 일치하지 않습니다. 다시 불러와주세요.')
+        return guess
+
+    def commit(self, guess):
+        if self.finished or any(row.word == guess.word for row in self.guesses):
+            raise GameError('게임 상태가 바뀌었어요. 다시 입력해주세요.')
         self.guesses.append(guess)
         self._save()
         return guess
+
+    def submit(self, text):
+        return self.commit(self.prepare(text))
 
     def give_up(self):
         if not self.won:
@@ -157,43 +192,34 @@ class GameSession:
         return self.answer
 
 
-def run_game(number, word_manager, *, state_dir=None):
-    game = GameSession(number, word_manager, state_dir=state_dir)
-    print(f'\n{number}회 꼬맨틀 게임 · /기록 /포기 /돌아가기')
-    if game.storage_warning:
-        print(game.storage_warning)
-    if game.won:
-        print(f'이미 {len(game.guesses)}번 만에 맞힌 회차입니다.')
-        return
-    if game.given_up:
-        print(f'포기한 회차입니다. 정답: {game.answer}')
-        return
-    print(f'이어서 {len(game.guesses) + 1}번째 추측을 입력하세요.')
-    while True:
-        text = input('추측 > ').strip()
-        command = text.lower()
-        if command in ('/돌아가기', '/back', '/q', '/quit'):
-            return
-        if command in ('/기록', '/history'):
-            for attempt, guess in sorted(enumerate(game.guesses, 1), key=lambda item: -item[1].similarity):
-                print(f'{attempt}번째 · {guess.word} · {guess.similarity:.2f} · {str(guess.rank) + "위" if guess.rank is not None else "순위 미제공"}')
-            continue
-        if command in ('/포기', '/giveup'):
-            if input('정답을 공개하고 포기할까요? [y/N] > ').strip().lower() == 'y':
-                print(f'정답: {game.give_up()}')
-                return
-            continue
-        if text.startswith('/'):
-            print('사용 가능한 명령: /기록 /포기 /돌아가기')
-            continue
+def index_words(data):
+    words = {}
+    for entry in sorted(data.word_list, key=lambda row: row['word_id']):
+        words.setdefault(normalize_word(entry['word'].word), entry)
+    return words
+
+
+def state_directory(directory=None):
+    return Path(directory or os.environ.get('KOMANTLE_STATE_DIR', Path.home() / '.local/state/komantle-helper'))
+
+
+def record_files(directory=None, number=None):
+    root = state_directory(directory)
+    if number is not None:
+        target = root / f'game-{number}.json'
+        return [target] if target.exists() else []
+    return sorted(p for p in root.glob('game-*.json') if re.fullmatch(r'game-\d+\.json', p.name) and (p.is_file() or p.is_symlink()))
+
+
+def delete_records(directory=None, number=None):
+    files = record_files(directory, number)
+    removed, failed = [], []
+    for target in files:
         try:
-            guess = game.submit(text)
-            rank = '정답!' if guess.correct else f'{guess.rank}위' if guess.rank is not None else '순위 미제공'
-            print(f'{len(game.guesses)}번째 · {guess.word} · 유사도 {guess.similarity:.2f} · {rank}')
-            if game.storage_warning:
-                print(game.storage_warning)
-            if game.won:
-                print(f'축하합니다! {len(game.guesses)}번 만에 정답을 맞혔어요.')
-                return
-        except GameError as error:
-            print(error)
+            target.unlink(missing_ok=True)
+            removed.append(target.name)
+        except OSError:
+            failed.append(target.name)
+    if failed:
+        raise GameError(f'{len(removed)}개 삭제, {len(failed)}개 삭제 실패: ' + ', '.join(failed))
+    return len(removed)

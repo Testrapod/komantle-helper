@@ -15,3 +15,5 @@ test-results/
 playwright-report/
 collection-result.json
 api-service/
+*.egg-info/
+build/

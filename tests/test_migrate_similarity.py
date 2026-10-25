@@ -6,8 +6,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from main import Word
-from scripts.collect_data import collect_archive, json_bytes, load_archive, read_round
+from komantle_helper.core import Word
+from komantle_helper.archive import json_bytes, read_round
+from scripts.collect_data import collect_archive, load_archive
 from scripts.demo_data import demo_manager
 from scripts.migrate_similarity import migrate_archive
 

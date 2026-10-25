@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "komantle-helper"
+version = "2.0.0"
+description = "꼬맨틀 헬퍼 · 힌트와 게임 CLI"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "requests==2.34.2",
+  "prompt-toolkit==3.0.53",
+  "rich==14.3.4",
+]
+
+[project.optional-dependencies]
+analysis = ["konlpy==0.6.0"]
+
+[project.scripts]
+komantle = "komantle_helper.cli.app:main"
+
+[tool.setuptools.packages.find]
+include = ["komantle_helper*"]

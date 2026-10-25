@@ -73,55 +73,96 @@ python3 -m http.server 4173 --bind 127.0.0.1 --directory .preview
 
 설정·권한·장애 복구는 [웹 배포 운영 안내](docs/github-pages-operations.md)를 참고하세요.
 
-## 실행 환경
+## 꼬맨틀 헬퍼 CLI
 
-- Python 3.12 (검증 버전: 3.12.13)
-- 품사 분석용 Java: macOS arm64의 JBR 21.0.11에서 검증
-- 인터넷 연결: 꼬맨틀 API 조회에 필요
+숫자 메뉴 없이, 하나의 입력창에서 추측과 힌트를 함께 사용합니다.
+단어를 입력하면 추측하고 `/`를 누르면 설명이 있는 명령 팔레트가 열립니다.
 
-품사를 조회할 때만 Java를 시작합니다. 다른 힌트는 Java 없이 사용할 수 있습니다.
-품사 분석은 기존 Okt 규칙을 유지합니다. 한 단어가 여러 형태소로 나뉘면 `기타`로 표시될 수 있습니다.
+```text
+ (\_/)     꼬맨틀 헬퍼
+ ( •‿•)    오늘의 단어로 가는 작은 실마리
+ / > <\
 
-## 가상환경 설치와 실행
+ › 과일
+   1번째 · 과일 · 유사도 51.25 · 1위
 
-이 작업 공간에는 `.venv`가 설치되어 있습니다. 바로 실행하려면:
-
-```sh
-source .venv/bin/activate
-python main.py
+ › /hint initial
 ```
 
-게임으로 바로 시작하려면:
+### 설치와 실행
 
-```sh
-python main.py --play
-python main.py --play --round 1667
-python main.py --play --state-dir /tmp/komantle-game-records
-```
-
-기존 힌트 메뉴의 `G`로도 게임에 들어갈 수 있습니다. 게임 중에는 `/기록`, `/포기`, `/돌아가기`를
-사용합니다. CLI 기록의 기본 경로는 `~/.local/state/komantle-helper/game-<회차>.json`이며
-`--state-dir` 또는 `KOMANTLE_STATE_DIR`로 변경할 수 있습니다. 게임 채점에는 Java가 필요하지 않습니다.
-
-다른 환경에서 새로 설치하려면 (`uv` 필요):
+Python 3.12 이상을 사용합니다. 아카이브의 힌트·품사와 게임에는 Java가 필요하지 않습니다.
 
 ```sh
 uv venv --seed --python 3.12 .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
-python main.py
+python -m pip install -e .
+komantle
 ```
 
-`uv`가 없다면 Python 3.12 설치 후 첫 명령을 `python3.12 -m venv .venv`로 대체할 수 있습니다.
+이미 준비된 이 작업 공간에서는 `source .venv/bin/activate` 후 `komantle`을 실행하면 됩니다.
+`uv`가 없다면 첫 명령을 `python3.12 -m venv .venv`로 바꿉니다.
+`python -m komantle_helper`와 `python main.py`로도 실행할 수 있습니다.
+
+```sh
+komantle --round 1667
+komantle --state-dir /tmp/komantle-records
+komantle --no-color --no-animation
+```
+
+| 명령 | 동작 |
+| --- | --- |
+| `/round` · `/round today` | 회차 선택 · 오늘 회차 |
+| `/rank 50` | 50위 단어의 힌트 선택, 0은 정답 |
+| `/hint` | 길이·품사·초성·유사도·한 글자·전체 단어 선택 |
+| `/hint char 2` | 두 번째 글자 공개 |
+| `/hide` | 공개한 힌트 모두 숨기기 |
+| `/history` | 유사도 순 추측 기록 |
+| `/giveup` | 확인 후 정답 공개와 포기 |
+| `/records delete current` · `/records delete all` | 확인 후 현재·전체 CLI 기록 삭제 |
+| `/status` · `/refresh` | 데이터 상태 · 새로 불러오기 |
+| `/settings` · `/help` · `/quit` | 화면 설정 · 도움말 · 종료 |
+
+`/힌트 초성`, `/회차 오늘`, `/기록`처럼 한글 명령도 사용할 수 있습니다.
+공개한 힌트는 갱신 패널에 표시하고, 회차·순위를 바꾸면 모두 숨깁니다.
+전체 단어 공개와 게임 포기는 별개이며, 전체 단어·포기·삭제 확인은 취소가 기본값입니다.
+
+CLI는 웹과 같은 공개 아카이브를 읽고 검증한 회차를 캐시합니다. 오늘 데이터가 없으면 최신
+보관 회차와 갱신 대기를 표시합니다. `/round today`는 원본 조회로 오늘 회차를 시도합니다.
+과거 회차의 미보관 단어는 원본 API의 채점 기간이 지나면 채점할 수 없습니다.
+
+게임 기록과 화면 설정은 `~/.local/state/komantle-helper/`, 데이터 캐시는
+`~/.cache/komantle-helper/`에 저장합니다. `--state-dir`/`KOMANTLE_STATE_DIR`,
+`--cache-dir`/`XDG_CACHE_HOME`으로 위치를 바꿀 수 있습니다. 웹 브라우저와 기록을 동기화하지 않습니다.
+
+입력·화면·오프라인 사용법은 [CLI 사용 안내](docs/cli.md)를 참고하세요.
+
+### 데이터 수집과 원본 품사 분석
+
+수집기 또는 원본 직접 조회의 품사 분석을 사용할 때만 추가 분석 모듈과 Java가 필요합니다.
+
+```sh
+python -m pip install -e '.[analysis]'
+# 개발·수집 환경 전체 설치는 python -m pip install -r requirements.txt
+```
+
+기존 Okt 분석 규칙을 사용하며, 여러 형태소로 나뉜 단어는 `기타`로 표시될 수 있습니다.
 macOS에서 Java를 찾지 못하면 `export JAVA_HOME="$(/usr/libexec/java_home)"`을 실행하세요.
 
-API는 조회 가능한 회차에 제한이 있습니다. 2026-10-24 확인 시 서버는 그저께부터 내일까지의
-회차만 허용하며, 오래된 회차는 HTTP 422와 함께 제한 사유를 반환했습니다.
+### API·Java 없이 CLI 확인
+
+```sh
+python -m scripts.demo_data
+komantle --archive-dir .demo-archive --state-dir /tmp/komantle-demo
+```
+
+합성 데이터이며 실제 정답이 아닙니다. 보관된 예시 단어 `과일`로 추측을 확인할 수 있습니다.
+미보관 단어를 입력하면 실제 채점 API에 연결을 시도합니다.
 
 ## 테스트
 
 ```sh
-# CLI·수집·누적 보관·빌드·Git 통합 테스트. 실제 API 테스트는 기본적으로 건너뜁니다.
+# 개발 환경 설치 후 CLI·수집·누적 보관·빌드·Git 통합 테스트. 실제 API 테스트는 기본적으로 건너뜁니다.
 python -m unittest discover -s tests -v
 
 # 실제 API와 Java로 오늘 1,001개 단어의 모든 힌트 및 어제 회차 검증

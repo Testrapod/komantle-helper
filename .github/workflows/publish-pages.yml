@@ -7,7 +7,8 @@ on:
       - 'web/**'
       - 'scripts/**'
       - 'tests/**'
-      - 'main.py'
+      - 'komantle_helper/**'
+      - 'pyproject.toml'
       - 'requirements.txt'
       - 'package*.json'
       - 'playwright.config.js'
@@ -79,7 +80,8 @@ jobs:
           python - <<'PY'
           import os
           from pathlib import Path
-          from scripts.collect_data import atomic_write, collect_archive, json_bytes
+          from komantle_helper.archive import atomic_write, json_bytes
+          from scripts.collect_data import collect_archive
           should_collect = os.environ['EVENT_NAME'] == 'schedule' or os.environ['COLLECT'] == 'true' or not Path('.archive/manifest.json').exists()
           force = os.environ.get('FORCE_ROUND', '').strip()
           if force and (not force.isascii() or not force.isdigit()):
