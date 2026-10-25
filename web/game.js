@@ -1,5 +1,17 @@
 export const GAME_PREFIX = 'komantle-helper:game:v1:';
 
+export function deleteGameRecords(round = null, storage = globalThis.localStorage) {
+  const keys = [];
+  if (round !== null) keys.push(`${GAME_PREFIX}${round}`);
+  else {
+    for (let index = 0; index < storage.length; index++) {
+      const key = storage.key(index);
+      if (key?.startsWith(GAME_PREFIX)) keys.push(key);
+    }
+  }
+  for (const key of keys) storage.removeItem(key);
+}
+
 export function normalizeGuess(value) {
   if (typeof value !== 'string') throw new Error('단어를 입력해주세요.');
   const word = value.normalize('NFC').trim().toLowerCase();

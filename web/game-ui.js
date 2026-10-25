@@ -1,14 +1,17 @@
-import { Game } from './game.js';
+import { Game, deleteGameRecords } from './game.js';
 import { GUESS_API_URL } from './config.js';
 
 const $ = id => document.getElementById(id);
 
 export function createGameUI() {
   let game = null;
+  let roundData = null;
+  let deletion = null;
   const message = (text, error = false) => { $('game-message').textContent = text; $('game-message').classList.toggle('is-error', error); };
   function render() {
     const ready = Boolean(game && !game.finished && !game.pending);
     $('guess-word').disabled = !ready; $('guess-submit').disabled = !ready; $('give-up').disabled = !ready;
+    $('delete-round-records').disabled = !game;
     $('game-count').textContent = `${game?.guesses.length || 0}번 추측`;
     $('game-warning').textContent = game?.warning || '';
     $('game-warning').hidden = !game?.warning;
@@ -47,19 +50,39 @@ export function createGameUI() {
   $('give-up-dialog').addEventListener('close', () => {
     if ($('give-up-dialog').returnValue === 'giveup' && game && !game.pending) { game.giveUp(); render(); }
   });
+  for (const scope of ['round', 'all']) {
+    $(`delete-${scope}-records`).addEventListener('click', () => {
+      if (scope === 'round' && !game) return;
+      deletion = { scope, game };
+      $('delete-records-title').textContent = scope === 'round' ? `${game.round}회 기록을 삭제할까요?` : '전체 회차 기록을 삭제할까요?';
+      $('delete-records-description').textContent = scope === 'round'
+        ? '이 회차의 추측 기록과 정답·포기 상태를 삭제하고 처음부터 다시 시작해요. 다른 회차의 기록은 남아요. 삭제한 기록은 되돌릴 수 없어요.'
+        : '이 브라우저에 저장된 모든 회차의 추측 기록과 정답·포기 상태를 삭제해요. 삭제한 기록은 되돌릴 수 없어요.';
+      $('delete-records-dialog').showModal();
+    });
+  }
+  $('delete-records-dialog').addEventListener('close', () => {
+    const target = deletion;
+    deletion = null;
+    if ($('delete-records-dialog').returnValue !== 'delete' || !target || target.game !== game) return;
+    try {
+      deleteGameRecords(target.scope === 'round' ? game.round : null);
+      if (roundData) mount(roundData);
+      message(target.scope === 'round' ? '이 회차 기록을 삭제했어요. 첫 단어부터 다시 시작해보세요.' : '전체 회차 기록을 삭제했어요. 첫 단어부터 다시 시작해보세요.');
+    } catch { message('기록을 삭제하지 못했어요. 브라우저의 저장소 설정을 확인하고 다시 시도해주세요.', true); }
+  });
   function clear() {
-    game?.close(); game = null;
+    game?.close(); game = null; roundData = null; deletion = null;
     if ($('give-up-dialog').open) $('give-up-dialog').close('cancel');
+    if ($('delete-records-dialog').open) $('delete-records-dialog').close('cancel');
     $('guess-word').value = '';
     message('회차 데이터를 불러오면 게임을 시작할 수 있어요.'); render();
   }
+  function mount(data) {
+    clear(); roundData = data; game = new Game(data, { apiURL: GUESS_API_URL });
+    message('첫 단어를 입력해보세요. 유사도가 높을수록 정답과 가까워요.');
+    render();
+  }
   clear();
-  return {
-    clear,
-    mount(data) {
-      clear(); game = new Game(data, { apiURL: GUESS_API_URL });
-      message('첫 단어를 입력해보세요. 유사도가 높을수록 정답과 가까워요.');
-      render();
-    },
-  };
+  return { clear, mount };
 }

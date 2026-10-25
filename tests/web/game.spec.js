@@ -107,3 +107,97 @@ test('game fits a narrow mobile screen and submits with the keyboard', async ({ 
   await expect(page.locator('#game-count')).toHaveText('1번 추측');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test('round deletion requires confirmation, preserves other rounds and stays deleted after reload', async ({ page }) => {
+  await ready(page);
+  const values = await page.locator('#round option').evaluateAll(options => options.map(option => option.value));
+  await guess(page, '과일');
+  await page.locator('#round').selectOption(values[1]);
+  await expect(page.locator('#guess-word')).toBeEnabled();
+  await guess(page, '과일');
+  await page.locator('#round').selectOption(values[0]);
+  await expect(page.locator('#game-count')).toHaveText('1번 추측');
+  await page.getByRole('button', { name: '이 회차 기록 삭제', exact: true }).click();
+  await expect(page.locator('#delete-records-title')).toContainText(`${values[0]}회`);
+  await page.getByRole('button', { name: '취소', exact: true }).click();
+  await expect(page.locator('#game-count')).toHaveText('1번 추측');
+  await page.getByRole('button', { name: '이 회차 기록 삭제', exact: true }).click();
+  await page.getByRole('button', { name: '기록 삭제하기', exact: true }).click();
+  await expect(page.locator('#game-count')).toHaveText('0번 추측');
+  await expect(page.locator('#game-history')).toBeHidden();
+  await expect(page.locator('#game-message')).toContainText('이 회차 기록을 삭제했어요');
+  expect(await page.evaluate(round => localStorage.getItem(`komantle-helper:game:v1:${round}`), values[0])).toBeNull();
+  await page.reload();
+  await expect(page.locator('#guess-word')).toBeEnabled();
+  await expect(page.locator('#game-count')).toHaveText('0번 추측');
+  await page.locator('#round').selectOption(values[1]);
+  await expect(page.locator('#game-count')).toHaveText('1번 추측');
+});
+
+test('all-round deletion removes every saved game and preserves unrelated storage', async ({ page }) => {
+  await ready(page);
+  await guess(page, '과일');
+  await page.evaluate(() => {
+    const currentKey = `komantle-helper:game:v1:${document.getElementById('round').value}`;
+    localStorage.setItem('komantle-helper:game:v1:1', localStorage.getItem(currentKey));
+    localStorage.setItem('komantle-helper:game:v1:2', '{broken record');
+    localStorage.setItem('other-app:preference', 'keep');
+  });
+  await page.getByRole('button', { name: '전체 회차 기록 삭제', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#game-count')).toHaveText('1번 추측');
+  await page.getByRole('button', { name: '전체 회차 기록 삭제', exact: true }).click();
+  await page.getByRole('button', { name: '기록 삭제하기', exact: true }).click();
+  await expect(page.locator('#game-count')).toHaveText('0번 추측');
+  expect(await page.evaluate(() => Object.keys(localStorage))).toEqual(['other-app:preference']);
+  await page.reload();
+  await expect(page.locator('#guess-word')).toBeEnabled();
+  await expect(page.locator('#game-count')).toHaveText('0번 추측');
+});
+
+for (const end of ['win', 'giveup']) {
+  test(`deletion resets ${end} state and permits playing again`, async ({ page }) => {
+    await ready(page);
+    if (end === 'win') await guess(page, '사과');
+    else {
+      await page.locator('#give-up').click();
+      await page.locator('#give-up-dialog').getByRole('button', { name: '정답 보고 포기하기' }).click();
+    }
+    await expect(page.locator('#guess-word')).toBeDisabled();
+    await page.getByRole('button', { name: '이 회차 기록 삭제', exact: true }).click();
+    await page.getByRole('button', { name: '기록 삭제하기', exact: true }).click();
+    await expect(page.locator('#guess-word')).toBeEnabled();
+    await expect(page.locator('#game-message')).not.toContainText('사과');
+    await guess(page, '과일');
+    await expect(page.locator('#game-count')).toHaveText('1번 추측');
+  });
+}
+
+test('deletion during scoring discards the response instead of restoring deleted history', async ({ page }) => {
+  let resolveRequest;
+  await page.route(GUESS_API_URL, async route => {
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type' } });
+    await new Promise(resolve => { resolveRequest = resolve; });
+    await route.fulfill({ headers: { 'Access-Control-Allow-Origin': '*' }, json: { word: '바다', similarity: 12, rank: null, correct: false } }).catch(() => {});
+  });
+  await ready(page); await guess(page, '과일'); await guess(page, '바다');
+  await expect.poll(() => Boolean(resolveRequest)).toBe(true);
+  await page.getByRole('button', { name: '이 회차 기록 삭제', exact: true }).click();
+  await page.getByRole('button', { name: '기록 삭제하기', exact: true }).click();
+  await expect(page.locator('#guess-word')).toBeEnabled();
+  resolveRequest();
+  await page.reload();
+  await expect(page.locator('#guess-word')).toBeEnabled();
+  await expect(page.locator('#game-count')).toHaveText('0번 추측');
+});
+
+test('failed storage deletion keeps the current game and explains the failure', async ({ page }) => {
+  await ready(page); await guess(page, '과일');
+  await page.evaluate(() => { Storage.prototype.removeItem = () => { throw new Error('denied'); }; });
+  await page.getByRole('button', { name: '이 회차 기록 삭제', exact: true }).click();
+  await page.getByRole('button', { name: '기록 삭제하기', exact: true }).click();
+  await expect(page.locator('#game-message')).toContainText('기록을 삭제하지 못했어요');
+  await expect(page.locator('#game-count')).toHaveText('1번 추측');
+  await page.reload();
+  await expect(page.locator('#game-count')).toHaveText('1번 추측');
+});

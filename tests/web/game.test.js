@@ -1,11 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Game, GAME_PREFIX, normalizeGuess } from '../../web/game.js';
+import { Game, GAME_PREFIX, normalizeGuess, deleteGameRecords } from '../../web/game.js';
 
 const data = { round: 1667, words: [
   { rank: 0, word: '사과', similarity: 100 }, { rank: 1, word: '과일', similarity: 51.25 },
 ] };
-const storage = () => { const map = new Map(); return { getItem: key => map.get(key), setItem: (key, value) => map.set(key, value) }; };
+const storage = () => { const map = new Map(); return {
+  get length() { return map.size; }, key: index => [...map.keys()][index] ?? null,
+  getItem: key => map.get(key), setItem: (key, value) => map.set(key, value), removeItem: key => map.delete(key),
+}; };
+
+test('deleting records targets one round or all game records while preserving other storage', () => {
+  const saved = storage();
+  for (const round of [1665, 1666, 1667]) new Game({ ...data, round }, { storage: saved }).giveUp();
+  saved.setItem('other-app:preference', 'keep');
+  deleteGameRecords(1667, saved);
+  assert.equal(saved.getItem(`${GAME_PREFIX}1667`), undefined);
+  assert.equal(new Game(data, { storage: saved }).givenUp, false);
+  assert.equal(new Game({ ...data, round: 1666 }, { storage: saved }).givenUp, true);
+  deleteGameRecords(null, saved);
+  assert.equal(saved.length, 1);
+  assert.equal(saved.getItem('other-app:preference'), 'keep');
+});
+
+test('storage deletion failures are reported to the caller', () => {
+  assert.throws(() => deleteGameRecords(1667, { removeItem() { throw new Error('denied'); } }), /denied/);
+});
 
 test('cached guesses, duplicates, win and per-round restore', async () => {
   const saved = storage();
