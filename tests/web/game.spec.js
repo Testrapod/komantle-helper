@@ -201,3 +201,24 @@ test('failed storage deletion keeps the current game and explains the failure', 
   await page.reload();
   await expect(page.locator('#game-count')).toHaveText('1번 추측');
 });
+
+for (const width of [375, 1459]) {
+  test(`record deletion buttons have separate click targets at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1231 });
+    await ready(page);
+    const buttons = page.getByRole('group', { name: '저장된 게임 기록 삭제' }).getByRole('button');
+    const first = await buttons.nth(0).boundingBox();
+    const second = await buttons.nth(1).boundingBox();
+    expect(first.height).toBeGreaterThanOrEqual(40);
+    expect(second.height).toBeGreaterThanOrEqual(40);
+    expect(second.x >= first.x + first.width + 10 || second.y >= first.y + first.height + 10).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await buttons.nth(0).click();
+    await expect(page.locator('#delete-records-dialog')).toBeVisible();
+    await page.getByRole('button', { name: '취소', exact: true }).click();
+    await buttons.nth(1).click();
+    await expect(page.locator('#delete-records-title')).toHaveText('전체 회차 기록을 삭제할까요?');
+    await page.getByRole('button', { name: '취소', exact: true }).click();
+    await page.locator('.game-panel').screenshot({ path: `test-results/record-controls-${width}.png` });
+  });
+}

@@ -2,6 +2,8 @@ import copy
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import re
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -122,6 +124,27 @@ class DataTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_site(self.root, output)
         self.assertTrue((output / 'keep.txt').exists())
+
+    def test_build_versions_styles_and_entire_module_graph_when_assets_change(self):
+        self.collect()
+        web = Path(self.temp.name) / 'web'
+        shutil.copytree(Path(__file__).resolve().parents[1] / 'web', web)
+        output = Path(self.temp.name) / 'site'
+        build_site(self.root, output, web=web)
+        index = (output / 'index.html').read_text()
+        version = re.search(r'app\.js\?v=([a-f0-9]{16})', index).group(1)
+        self.assertIn(f'./styles.css?v={version}', index)
+        for module, dependencies in {'app.js': ['data.js', 'hints.js', 'game-ui.js'],
+                                     'game-ui.js': ['game.js', 'config.js']}.items():
+            for dependency in dependencies:
+                self.assertIn(f'./{dependency}?v={version}', (output / module).read_text())
+        build_site(self.root, output, web=web)
+        self.assertEqual((output / 'index.html').read_text(), index)
+        with (web / 'game.js').open('a') as source:
+            source.write('\n// changed nested dependency\n')
+        build_site(self.root, output, web=web)
+        self.assertNotIn(version, (output / 'index.html').read_text())
+        self.assertNotIn('?v=', (web / 'app.js').read_text())
 
     def test_failed_deployment_retries_but_success_is_noop(self):
         self.collect()
